@@ -56,15 +56,15 @@ from itertools import cycle
 import numpy as np
 from scipy import ndimage as ndi
 
-__all__ = ['morphological_chan_vese',
-           'morphological_geodesic_active_contour',
-           'inverse_gaussian_gradient',
-           'circle_level_set',
-           'checkerboard_level_set'
-          ]
+__all__ = [
+    'morphological_chan_vese',
+    'morphological_geodesic_active_contour',
+    'inverse_gaussian_gradient',
+    'circle_level_set',
+    'checkerboard_level_set'
+]
 
-
-__version__ = (2, 0, 1)
+__version__ = (2, 1, 1)
 __version_str__ = ".".join(map(str, __version__))
 
 
@@ -139,7 +139,7 @@ _curvop = _fcycle([lambda u: sup_inf(inf_sup(u)),   # SIoIS
 
 def _check_input(image, init_level_set):
     """Check that shapes of `image` and `init_level_set` match."""
-    if not image.ndim in [2, 3]:
+    if image.ndim not in [2, 3]:
         raise ValueError("`image` must be a 2 or 3-dimensional array.")
 
     if len(image.shape) != len(init_level_set.shape):
@@ -157,9 +157,11 @@ def _init_level_set(init_level_set, image_shape):
             res = checkerboard_level_set(image_shape)
         elif init_level_set == 'circle':
             res = circle_level_set(image_shape)
+        elif init_level_set == 'ellipsoid':
+            res = ellipsoid_level_set(image_shape)
         else:
             raise ValueError("`init_level_set` not in "
-                             "['checkerboard', 'circle']")
+                             "['checkerboard', 'circle', 'ellipsoid']")
     else:
         res = init_level_set
     return res
@@ -186,6 +188,7 @@ def circle_level_set(image_shape, center=None, radius=None):
 
     See also
     --------
+    ellipsoid_level_set
     checkerboard_level_set
     """
 
@@ -198,6 +201,65 @@ def circle_level_set(image_shape, center=None, radius=None):
     grid = np.mgrid[[slice(i) for i in image_shape]]
     grid = (grid.T - center).T
     phi = radius - np.sqrt(np.sum((grid)**2, 0))
+    res = np.int8(phi > 0)
+    return res
+
+
+def ellipsoid_level_set(image_shape, center=None, semi_axis=None):
+    """Create a ellipsoid level set with binary values.
+
+    Parameters
+    ----------
+    image_shape : tuple of positive integers
+        Shape of the image
+    center : tuple of integers, optional
+        Coordinates of the center of the ellipsoid.
+        If not given, it defaults to the center of the image.
+    semi_axis : tuple of floats, optional
+        Lengths of the semi-axis of the ellispoid.
+        If not given, it defaults to the half of the image dimensions.
+
+    Returns
+    -------
+    out : array with shape `image_shape`
+        Binary level set of the ellipsoid with the given `center`
+        and `semi_axis`.
+
+    See also
+    --------
+    circle_level_set
+    """
+
+    if center is None:
+        center = tuple(i // 2 for i in image_shape)
+
+    if semi_axis is None:
+        semi_axis = tuple(i / 2 for i in image_shape)
+
+    if len(center) != len(image_shape):
+        raise ValueError("`center` and `image_shape` must have the same length.")
+
+    if len(semi_axis) != len(image_shape):
+        raise ValueError("`semi_axis` and `image_shape` must have the same length.")
+
+    if len(image_shape) == 2:
+        xc, yc = center
+        rx, ry = semi_axis
+        phi = 1 - np.fromfunction(
+            lambda x, y: ((x - xc) / rx) ** 2 +
+                         ((y - yc) / ry) ** 2,
+            image_shape, dtype=float)
+    elif len(image_shape) == 3:
+        xc, yc, zc = center
+        rx, ry, rz = semi_axis
+        phi = 1 - np.fromfunction(
+            lambda x, y, z: ((x - xc) / rx) ** 2 +
+                            ((y - yc) / ry) ** 2 +
+                            ((z - zc) / rz) ** 2,
+            image_shape, dtype=float)
+    else:
+        raise ValueError("`image_shape` must be a 2- or 3-tuple.")
+
     res = np.int8(phi > 0)
     return res
 
